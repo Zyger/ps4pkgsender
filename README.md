@@ -21,17 +21,7 @@ It scans a folder for `.pkg` files, displays them in a clean web interface with 
 
 ![PS4 PKG Sender homepage](screenshots/homepage.png)
 
-If the image does not show on GitHub, make sure the file exists here:
 
-```text
-screenshots/homepage.png
-```
-
-You can also view it directly here:
-
-```text
-https://github.com/kekec777/ps4pkgsender/blob/main/screenshots/homepage.png
-```
 
 ## Requirements
 
