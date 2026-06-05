@@ -1,0 +1,324 @@
+:root {
+  --bg: #0b1020;
+  --panel: rgba(17, 25, 45, 0.88);
+  --panel-soft: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.12);
+  --text: #eef3ff;
+  --muted: #9aa8c7;
+  --accent: #68d391;
+  --accent-2: #63b3ed;
+  --danger: #fc8181;
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(99, 179, 237, 0.2), transparent 32rem),
+    radial-gradient(circle at top right, rgba(104, 211, 145, 0.16), transparent 30rem),
+    var(--bg);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.pkg-page {
+  width: min(1450px, calc(100% - 24px));
+  margin: 0 auto;
+  padding: 28px 0 48px;
+}
+
+.hero-card,
+.panel-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+
+.hero-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 24px;
+  align-items: center;
+  padding: 32px;
+  margin-bottom: 18px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--accent-2);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+h1, h2, h3, p { margin-top: 0; }
+
+h1 { font-size: clamp(2rem, 4vw, 4.4rem); line-height: 0.95; margin-bottom: 14px; }
+h2 { font-size: 1.35rem; margin-bottom: 0; }
+h3 { font-size: 1rem; margin-bottom: 6px; }
+
+.hero-text { max-width: 720px; margin: 0; color: var(--muted); font-size: 1.08rem; }
+
+.hero-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(110px, 1fr));
+  gap: 12px;
+}
+
+.stat-card {
+  padding: 18px;
+  min-width: 120px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel-soft);
+}
+.stat-card.wide { grid-column: span 2; }
+.stat-card span { display: block; font-size: 1.45rem; font-weight: 800; }
+.stat-card small { color: var(--muted); }
+
+.control-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.panel-card { padding: 22px; }
+.panel-title-row { display: flex; justify-content: space-between; gap: 18px; align-items: center; }
+
+.ip-pill {
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: rgba(104, 211, 145, 0.14);
+  color: #baf7d1;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.ip-form {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.form-control,
+.search-box input {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.form-control:focus,
+.search-box input:focus {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(99, 179, 237, 0.7);
+  box-shadow: 0 0 0 0.2rem rgba(99, 179, 237, 0.12);
+}
+.form-control::placeholder,
+.search-box input::placeholder { color: rgba(238, 243, 255, 0.45); }
+
+.search-box { position: relative; margin-top: 18px; }
+.search-box i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+.search-box input { width: 100%; padding: 11px 14px 11px 42px; outline: none; }
+
+.btn { border-radius: 14px; font-weight: 800; }
+.btn-primary { background: #3182ce; border-color: #3182ce; }
+.btn-success { background: #2f855a; border-color: #2f855a; }
+.btn-outline-light { border-color: var(--border); color: var(--text); }
+
+.pkg-accordion .accordion-item {
+  overflow: hidden;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+}
+.pkg-accordion .accordion-button {
+  gap: 14px;
+  color: var(--text);
+  background: transparent;
+  box-shadow: none;
+  font-weight: 800;
+}
+.pkg-accordion .accordion-button:not(.collapsed) { background: rgba(99, 179, 237, 0.1); }
+.pkg-accordion .accordion-button::after { filter: invert(1); }
+.folder-name { flex: 1; display: inline-flex; gap: 10px; align-items: center; }
+.folder-count {
+  padding: 6px 10px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 999px;
+  font-size: 0.82rem;
+}
+
+.pkg-list { display: grid; gap: 10px; padding: 14px; }
+.pkg-row {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.cover-button {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(99, 179, 237, 0.18), rgba(104, 211, 145, 0.1));
+  cursor: pointer;
+}
+.cover-button img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.2s ease; }
+.cover-button:hover img { transform: scale(1.07); }
+.cover-fallback { display: none; color: var(--muted); font-size: 1.5rem; }
+.cover-button.no-cover { display: grid; place-items: center; cursor: default; }
+.cover-button.no-cover .cover-fallback { display: block; }
+
+.pkg-info { min-width: 0; }
+.pkg-info h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pkg-info p { margin: 0; color: var(--muted); font-size: 0.88rem; }
+.pkg-meta { color: #d6e4ff; font-weight: 800; white-space: nowrap; }
+.install-form { margin: 0; }
+
+.empty-state { padding: 48px 16px; text-align: center; color: var(--muted); }
+.empty-state i { margin-bottom: 12px; font-size: 2.4rem; }
+.empty-state h3 { color: var(--text); }
+
+.image-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: none;
+  place-items: center;
+  padding: 52px 18px 36px;
+  background: rgba(0, 0, 0, 0.88);
+}
+.image-modal.open { display: grid; }
+.image-modal img {
+  max-width: min(920px, 94vw);
+  max-height: 78vh;
+  object-fit: contain;
+  border-radius: 20px;
+  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.6);
+}
+.image-modal p { margin: 14px 0 0; color: var(--text); text-align: center; }
+.modal-close {
+  position: fixed;
+  top: 16px;
+  right: 24px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.toast-area {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 6000;
+  display: grid;
+  gap: 10px;
+  width: min(420px, calc(100vw - 32px));
+}
+.app-toast {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--accent-2);
+  border-radius: 16px;
+  background: #11192d;
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.app-toast.success { border-left-color: var(--accent); }
+.app-toast.error { border-left-color: var(--danger); }
+
+@media (max-width: 900px) {
+  .hero-card,
+  .control-grid { grid-template-columns: 1fr; }
+  .hero-stats { grid-template-columns: repeat(3, 1fr); }
+  .stat-card.wide { grid-column: auto; }
+}
+
+@media (max-width: 650px) {
+  .pkg-page { width: min(100% - 14px, 1450px); padding-top: 8px; }
+  .hero-card,
+  .panel-card { border-radius: 18px; padding: 16px; }
+  .panel-title-row,
+  .ip-form { align-items: stretch; flex-direction: column; }
+  .ip-pill { max-width: 100%; text-align: center; }
+  .hero-stats { grid-template-columns: 1fr; }
+  .pkg-row { grid-template-columns: 64px minmax(0, 1fr); }
+  .cover-button { width: 64px; height: 64px; }
+  .pkg-meta,
+  .install-form { grid-column: 2; }
+  .install-btn { width: 100%; }
+}
+
+
+/* Folder/game cover used in the accordion header */
+.folder-cover {
+  width: 54px;
+  height: 54px;
+  min-width: 54px;
+  object-fit: cover;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(99, 179, 237, 0.18), rgba(104, 211, 145, 0.1));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.folder-cover:hover {
+  transform: scale(1.04);
+}
+
+.pkg-accordion .accordion-button {
+  min-height: 76px;
+}
+
+.folder-name {
+  min-width: 0;
+}
+
+.folder-name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 650px) {
+  .folder-cover {
+    width: 46px;
+    height: 46px;
+    min-width: 46px;
+    border-radius: 12px;
+  }
+
+  .pkg-accordion .accordion-button {
+    min-height: 68px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}

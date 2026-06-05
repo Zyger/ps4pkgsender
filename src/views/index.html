@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PS4 PKG Sender</title>
+
+  <link rel="stylesheet" href="/css/fontawesome.min.css">
+  <link rel="stylesheet" href="/css/brands.min.css">
+  <link rel="stylesheet" href="/css/solid.min.css">
+  <link rel="stylesheet" href="/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="pkg-page">
+    <section class="hero-card">
+      <div>
+        <p class="eyebrow">PS4 PKG Sender</p>
+        <h1>Package library</h1>
+        <p class="hero-text">Browse your PKG folders, preview covers, and send installs to your PS4 without leaving the page.</p>
+      </div>
+      <div class="hero-stats">
+        <div class="stat-card">
+          <span>{{totalPkgs}}</span>
+          <small>Packages</small>
+        </div>
+        <div class="stat-card">
+          <span>{{totalDirs}}</span>
+          <small>Folders</small>
+        </div>
+        <div class="stat-card wide">
+          <span>{{totalSize}}</span>
+          <small>Total size</small>
+        </div>
+      </div>
+    </section>
+
+    <section class="control-grid">
+      <article class="panel-card ps4-card">
+        <div class="panel-title-row">
+          <div>
+            <p class="eyebrow">Target console</p>
+            <h2>PS4 IP address</h2>
+          </div>
+          <span class="ip-pill" id="currentps4ipadrdiv">Loading...</span>
+        </div>
+
+        <form id="updateForm" class="ip-form" autocomplete="off">
+          <input class="form-control" type="text" id="newPS4ipadr" name="newPS4ipadr" placeholder="192.168.1.50" required>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-rotate"></i>
+            Update
+          </button>
+        </form>
+      </article>
+
+      <article class="panel-card search-card">
+        <p class="eyebrow">Filter</p>
+        <h2>Find a package</h2>
+        <div class="search-box">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="pkgSearch" type="search" placeholder="Search by package name or folder...">
+        </div>
+      </article>
+    </section>
+
+    <section class="panel-card">
+      <div class="panel-title-row mb-3">
+        <div>
+          <p class="eyebrow">Library</p>
+          <h2>Available packages</h2>
+        </div>
+        <button class="btn btn-outline-light btn-sm" id="expandAll" type="button">Expand all</button>
+      </div>
+
+      {{#hasDirs}}
+      <div class="accordion pkg-accordion" id="accordion_pkgs">
+        {{#dirs}}
+        <div class="accordion-item pkg-folder" data-folder="{{root}}">
+          <h2 class="accordion-header" id="heading_{{id}}">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse_{{id}}" aria-expanded="false" aria-controls="collapse_{{id}}">
+              <span class="folder-name">
+                <img
+                  src="/public/images/{{folderImgname}}"
+                  alt="{{root}} cover"
+                  class="folder-cover"
+                  loading="lazy"
+                  onerror="this.onerror=null;this.src='/public/images/folder.png';"
+                >
+                <span>{{root}}</span>
+              </span>
+              <span class="folder-count">{{count}} pkg</span>
+            </button>
+          </h2>
+
+          <div id="collapse_{{id}}" class="accordion-collapse collapse" aria-labelledby="heading_{{id}}" data-bs-parent="#accordion_pkgs">
+            <div class="pkg-list">
+              {{#pkgs}}
+              <article class="pkg-row" data-search="{{searchText}}">
+                <button class="cover-button" type="button" data-image="/public/images/{{imgname}}" data-title="{{name}}">
+                  <img src="/public/images/{{imgname}}" alt="{{name}} cover" loading="lazy" onerror="this.closest('.cover-button').classList.add('no-cover'); this.remove();">
+                  <span class="cover-fallback"><i class="fa-solid fa-image"></i></span>
+                </button>
+
+                <div class="pkg-info">
+                  <h3 title="{{name}}">{{name}}</h3>
+                  <p>{{dir}}</p>
+                </div>
+
+                <div class="pkg-meta">
+                  <span>{{size}}</span>
+                </div>
+
+                <form class="install-form" action="/install" method="post">
+                  <input type="hidden" name="filepath" value="{{filepath}}">
+                  <button type="submit" class="btn btn-success install-btn">
+                    <i class="fa-solid fa-cloud-arrow-down"></i>
+                    Install
+                  </button>
+                </form>
+              </article>
+              {{/pkgs}}
+            </div>
+          </div>
+        </div>
+        {{/dirs}}
+      </div>
+      {{/hasDirs}}
+
+      {{^hasDirs}}
+      <div class="empty-state">
+        <i class="fa-solid fa-box-open"></i>
+        <h3>No packages found</h3>
+        <p>Make sure STATIC_FILES points to the folder containing your .pkg files.</p>
+      </div>
+      {{/hasDirs}}
+    </section>
+  </main>
+
+  <div class="image-modal" id="imageModal" aria-hidden="true">
+    <button class="modal-close" type="button" aria-label="Close image">×</button>
+    <img id="modalImage" src="" alt="">
+    <p id="modalCaption"></p>
+  </div>
+
+  <div class="toast-area" id="toastArea" aria-live="polite"></div>
+
+  <script src="/js/bootstrap.bundle.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const ipOutput = document.getElementById('currentps4ipadrdiv');
+      const ipForm = document.getElementById('updateForm');
+      const ipInput = document.getElementById('newPS4ipadr');
+      const pkgSearch = document.getElementById('pkgSearch');
+      const expandAllBtn = document.getElementById('expandAll');
+      const imageModal = document.getElementById('imageModal');
+      const modalImage = document.getElementById('modalImage');
+      const modalCaption = document.getElementById('modalCaption');
+      const toastArea = document.getElementById('toastArea');
+
+      function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `app-toast ${type}`;
+        toast.textContent = message;
+        toastArea.appendChild(toast);
+        setTimeout(() => toast.remove(), 6500);
+      }
+
+      async function requestJson(url, options = {}) {
+        const response = await fetch(url, options);
+        const text = await response.text();
+        let data = {};
+        try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { message: text }; }
+        if (!response.ok) throw new Error(data.message || `Request failed (${response.status})`);
+        return data;
+      }
+
+      async function loadCurrentIp() {
+        try {
+          const data = await requestJson('/api/ps4ip');
+          ipOutput.textContent = data.variable || 'Not set';
+          ipInput.value = data.variable || '';
+        } catch (error) {
+          ipOutput.textContent = 'Error';
+          showToast(error.message, 'error');
+        }
+      }
+
+      ipForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const button = ipForm.querySelector('button');
+        button.disabled = true;
+        try {
+          const data = await requestJson('/api/ps4ip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ newPS4ipadr: ipInput.value.trim() })
+          });
+          ipOutput.textContent = data.variable;
+          showToast(data.message || 'PS4 IP updated', 'success');
+        } catch (error) {
+          showToast(error.message, 'error');
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      document.querySelectorAll('.install-form').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const button = form.querySelector('button');
+          const original = button.innerHTML;
+          button.disabled = true;
+          button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending';
+          try {
+            const data = await requestJson('/install', {
+              method: 'POST',
+              body: new URLSearchParams(new FormData(form))
+            });
+            showToast(data.message || 'Install request sent to PS4', 'success');
+          } catch (error) {
+            showToast(error.message, 'error');
+          } finally {
+            button.disabled = false;
+            button.innerHTML = original;
+          }
+        });
+      });
+
+      pkgSearch.addEventListener('input', () => {
+        const needle = pkgSearch.value.trim().toLowerCase();
+        document.querySelectorAll('.pkg-folder').forEach((folder) => {
+          let visibleRows = 0;
+          folder.querySelectorAll('.pkg-row').forEach((row) => {
+            const visible = !needle || row.dataset.search.includes(needle);
+            row.hidden = !visible;
+            if (visible) visibleRows++;
+          });
+          folder.hidden = visibleRows === 0;
+          const collapse = folder.querySelector('.accordion-collapse');
+          if (needle && visibleRows > 0) bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: false }).show();
+        });
+      });
+
+      expandAllBtn.addEventListener('click', () => {
+        const open = expandAllBtn.dataset.open === '1';
+        document.querySelectorAll('.accordion-collapse').forEach((collapse) => {
+          bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: false })[open ? 'hide' : 'show']();
+        });
+        expandAllBtn.dataset.open = open ? '0' : '1';
+        expandAllBtn.textContent = open ? 'Expand all' : 'Collapse all';
+      });
+
+      function openImageModal(imageSrc, title) {
+        modalImage.src = imageSrc;
+        modalImage.alt = title;
+        modalCaption.textContent = title;
+        imageModal.classList.add('open');
+        imageModal.setAttribute('aria-hidden', 'false');
+      }
+
+      document.querySelectorAll('.cover-button').forEach((button) => {
+        button.addEventListener('click', () => {
+          openImageModal(button.dataset.image, button.dataset.title);
+        });
+      });
+
+      document.querySelectorAll('.folder-cover').forEach((img) => {
+        img.addEventListener('click', (event) => {
+          event.stopPropagation();
+          openImageModal(img.src, img.alt.replace(' cover', ''));
+        });
+      });
+
+      function closeImageModal() {
+        imageModal.classList.remove('open');
+        imageModal.setAttribute('aria-hidden', 'true');
+        modalImage.src = '';
+      }
+
+      imageModal.addEventListener('click', (event) => {
+        if (event.target === imageModal || event.target.classList.contains('modal-close')) closeImageModal();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeImageModal();
+      });
+
+      loadCurrentIp();
+    });
+  </script>
+</body>
+</html>
