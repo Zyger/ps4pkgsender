@@ -303,9 +303,3 @@ If the host can ping the PS4 but the container cannot, check Docker networking, 
 This app is intended for trusted local networks.
 
 Do not expose this service publicly to the internet. It can list and serve files from the configured `STATIC_FILES` directory and send install commands to your configured PS4 IP.
-
-## License
-
-MIT License
-
-You can change this section if you want to use another license.
