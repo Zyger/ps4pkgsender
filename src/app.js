@@ -12,6 +12,7 @@ const port = Number(process.env.PORT || 7777);
 const staticFilesPath = path.resolve(process.env.STATIC_FILES || './files');
 const localIp = process.env.LOCALIP || 'localhost';
 const coverImagesPath = path.join(__dirname, 'public', 'images');
+const thumbnailImagesPath = path.join(__dirname, 'public', 'thumbnail');
 const coverMapUrl = process.env.COVER_MAP_URL || 'https://raw.githubusercontent.com/hmn/ps4-imagemap/master/games.json';
 const coverStoreRegions = (process.env.COVER_STORE_REGIONS || 'DK/da,GB/en,US/en,DE/de,SE/sv,NO/no')
   .split(',')
@@ -40,6 +41,7 @@ app.set('views', path.join(__dirname, 'views'));
 app.get('/', (req, res, next) => {
   try {
     const dirs = flattenPkgs(getPkgs());
+    ensureFolderThumbnails(dirs);
     const totalPkgs = dirs.reduce((sum, dir) => sum + dir.count, 0);
     const totalBytes = dirs.reduce((sum, dir) => sum + dir.bytes, 0);
 
@@ -139,13 +141,21 @@ app.post('/api/covers/download-missing', async (req, res) => {
 
       try {
         const savedAs = await downloadCoverImage(lookup.url, pkg.imgname);
+        const folderThumbname = `${safeFileBase(pkg.root)}.jpg`;
+        const folderThumbPath = path.join(thumbnailImagesPath, folderThumbname);
+
+        if (!fs.existsSync(folderThumbPath)) {
+          fs.mkdirSync(thumbnailImagesPath, { recursive: true });
+          fs.copyFileSync(path.join(coverImagesPath, savedAs), folderThumbPath);
+        }
 
         results.push({
           package: pkg.name,
           titleId,
           status: 'downloaded',
           source: lookup.source,
-          savedAs
+          savedAs,
+          folderThumbnail: folderThumbname
         });
       } catch (error) {
         results.push({
@@ -203,14 +213,16 @@ function flattenPkgs(pkgs) {
       const rootPkgs = pkgs[root].sort((a, b) => a.name.localeCompare(b.name));
       const bytes = rootPkgs.reduce((sum, pkg) => sum + pkg.bytes, 0);
       const pkgWithCover = rootPkgs.find((pkg) => fs.existsSync(path.join(coverImagesPath, pkg.imgname)));
-      const folderImgname = (pkgWithCover || rootPkgs[0] || { imgname: 'folder.png' }).imgname;
+      const firstCoverPkg = pkgWithCover || rootPkgs[0] || { imgname: 'folder.png' };
+      const folderThumbname = `${safeFileBase(root)}.jpg`;
 
       return {
         id: crypto.randomUUID(),
         root,
         count: rootPkgs.length,
         bytes,
-        folderImgname,
+        folderImgname: firstCoverPkg.imgname,
+        folderThumbname,
         pkgs: rootPkgs
       };
     });
@@ -303,6 +315,42 @@ function ps4Install(filepath) {
         stderr
       });
     });
+  });
+}
+
+
+function safeFileBase(value) {
+  return String(value || 'folder')
+    .trim()
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-zA-Z0-9._ -]/g, '_')
+    .replace(/\s+/g, '_')
+    .slice(0, 180) || 'folder';
+}
+
+function ensureFolderThumbnails(dirs) {
+  fs.mkdirSync(thumbnailImagesPath, { recursive: true });
+
+  dirs.forEach((dir) => {
+    const targetPath = path.join(thumbnailImagesPath, dir.folderThumbname);
+
+    if (fs.existsSync(targetPath)) {
+      return;
+    }
+
+    const pkgWithCover = dir.pkgs.find((pkg) => fs.existsSync(path.join(coverImagesPath, pkg.imgname)));
+
+    if (!pkgWithCover) {
+      return;
+    }
+
+    const sourcePath = path.join(coverImagesPath, pkgWithCover.imgname);
+
+    try {
+      fs.copyFileSync(sourcePath, targetPath);
+    } catch (error) {
+      console.warn(`Could not create folder thumbnail for ${dir.root}: ${error.message}`);
+    }
   });
 }
 
@@ -454,7 +502,7 @@ async function downloadCoverImage(imageUrl, imgname) {
 
   fs.mkdirSync(coverImagesPath, { recursive: true });
 
-  const safeImgname = path.basename(imgname).replace(/[^a-zA-Z0-9._ -]/g, '_');
+  const safeImgname = `${safeFileBase(path.basename(imgname, path.extname(imgname)))}.jpg`;
   const targetPath = path.join(coverImagesPath, safeImgname);
 
   fs.writeFileSync(targetPath, buffer);
