@@ -12,11 +12,13 @@ This project is a fork of [`justanormaldev/ps4-pkg-sender`](https://github.com/j
 - PKG/game cover images from `src/public/images/`
 - Strict separation between thumbnails and package cover images
 - Download missing covers button
+- Live debug toggle for cover downloads
+- Timeout handling so one slow cover source does not stop the whole scan
 - Docker and Docker Compose support
 
 ## Cover search order
 
-The **Download missing covers** button searches in this order with debug toggle:
+The **Download missing covers** button searches in this order. The **Live debug** toggle shows progress while the scan is running:
 
 1. GitHub cover map
 2. PlayStation Store by CUSA
@@ -26,7 +28,7 @@ The **Download missing covers** button searches in this order with debug toggle:
 6. PlayStation Store title search
 7. ORBISPatches final fallback
 
-The search engine searchs for:
+The search engine checks for these title ID formats:
 CUSAxxxxx
 SLUSxxxxx
 SCUSxxxxx
@@ -47,6 +49,10 @@ ULESxxxxx
 UCUSxxxxx
 UCESxxxxx
 
+If nothing is found, the app keeps using the fallback `folder.png` image for missing cover images.
+
+If one source is slow, times out, or fails, the app marks that item as skipped/failed and moves to the next missing image instead of stopping the whole scan.
+
 Package images are saved to:
 
 ```text
@@ -58,8 +64,6 @@ Folder thumbnails are saved to:
 ```text
 src/public/thumbnail/
 ```
-
-if nothing found, then folder.png will be choosen for missing cover img
 
 ## Screenshots
 
@@ -126,6 +130,8 @@ src/public/thumbnail/
 
 The result panel stays visible after the download finishes, so you can see what was downloaded, skipped, or failed.
 
+Enable **Live debug** before clicking **Download missing covers** to see each item as it is processed. If an external source hangs or takes too long, the app uses the timeout settings and continues to the next missing image.
+
 Example result:
 
 ```text
@@ -146,6 +152,8 @@ FAILED: thumbnail - Castlevania_SLUS00067.pkg
 | `COVER_STORE_REGIONS` | PlayStation Store regions to try | `DK/da,GB/en,US/en,DE/de,SE/sv,NO/no` |
 | `COVER_SEARCH_REGIONS` | Regions used for title search | `DK/da,GB/en,US/en,DE/de,SE/sv,NO/no` |
 | `COVER_ENABLE_ORBISPATCHES` | Enable ORBISPatches as final fallback | `true` |
+| `COVER_FETCH_TIMEOUT_MS` | Timeout for each external cover-source request in milliseconds | `7000` |
+| `COVER_ITEM_TIMEOUT_MS` | Maximum time spent on one missing image/thumbnail before moving to the next item | `45000` |
 
 Example `.env`:
 
@@ -157,6 +165,8 @@ PKG_DIR=/pkgs
 COVER_STORE_REGIONS=DK/da,GB/en,US/en,DE/de,SE/sv,NO/no
 COVER_SEARCH_REGIONS=DK/da,GB/en,US/en,DE/de,SE/sv,NO/no
 COVER_ENABLE_ORBISPATCHES=true
+COVER_FETCH_TIMEOUT_MS=7000
+COVER_ITEM_TIMEOUT_MS=45000
 ```
 
 ## Docker Compose example
@@ -179,6 +189,8 @@ services:
       COVER_ENABLE_ORBISPATCHES: "true"
       COVER_STORE_REGIONS: "DK/da,GB/en,US/en,DE/de,SE/sv,NO/no"
       COVER_SEARCH_REGIONS: "DK/da,GB/en,US/en,DE/de,SE/sv,NO/no"
+      COVER_FETCH_TIMEOUT_MS: "7000"
+      COVER_ITEM_TIMEOUT_MS: "45000"
     volumes:
       - /path/to/your/pkgs:/pkgs
       - ./src/public/images:/pkg_sender/src/public/images
@@ -236,6 +248,27 @@ Try adding more regions:
 COVER_STORE_REGIONS=US/en,GB/en,DK/da,DE/de,FR/fr,ES/es,IT/it,SE/sv,NO/no
 COVER_SEARCH_REGIONS=US/en,GB/en,DK/da,DE/de,FR/fr,ES/es,IT/it,SE/sv,NO/no
 ```
+
+
+### Live debug seems stuck on one item
+
+A cover source can sometimes respond very slowly or hang. Use these timeout variables to make the app continue to the next missing image instead of waiting too long:
+
+```env
+COVER_FETCH_TIMEOUT_MS=7000
+COVER_ITEM_TIMEOUT_MS=45000
+```
+
+For faster testing, you can lower them:
+
+```env
+COVER_FETCH_TIMEOUT_MS=4000
+COVER_ITEM_TIMEOUT_MS=20000
+```
+
+`COVER_FETCH_TIMEOUT_MS` controls each external HTTP request.
+
+`COVER_ITEM_TIMEOUT_MS` controls the total maximum time spent on one missing image or thumbnail before the app moves to the next item.
 
 ### SerialStation image failed with `Cover URL is not http/https`
 
