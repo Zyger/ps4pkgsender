@@ -16,7 +16,7 @@ This project is a fork of [`justanormaldev/ps4-pkg-sender`](https://github.com/j
 
 ## Cover search order
 
-The **Download missing covers** button searches in this order:
+The **Download missing covers** button searches in this order with debug toggle:
 
 1. GitHub cover map
 2. PlayStation Store by CUSA
