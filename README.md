@@ -26,6 +26,27 @@ The **Download missing covers** button searches in this order:
 6. PlayStation Store title search
 7. ORBISPatches final fallback
 
+The search engine searchs for:
+CUSAxxxxx
+SLUSxxxxx
+SCUSxxxxx
+SCESxxxxx
+SLESxxxxx
+SLPSxxxxx
+SLPMxxxxx
+NPUJxxxxx
+NPUIxxxxx
+NPEFxxxxx
+NPUGxxxxx
+NPEGxxxxx
+NPUBxxxxx
+NPEBxxxxx
+NPHGxxxxx
+ULUSxxxxx
+ULESxxxxx
+UCUSxxxxx
+UCESxxxxx
+
 Package images are saved to:
 
 ```text
