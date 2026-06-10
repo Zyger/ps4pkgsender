@@ -59,6 +59,8 @@ Folder thumbnails are saved to:
 src/public/thumbnail/
 ```
 
+if nothing found, then folder.png will be choosen for missing cover img
+
 ## Screenshots
 
 ![PS4 PKG Sender homepage](screenshots/homepage.png)
