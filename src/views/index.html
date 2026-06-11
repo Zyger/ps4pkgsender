@@ -24,7 +24,38 @@
     .cover-results-header h3 {
       margin: 0;
     }
-  </style>
+  
+    .debug-live-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      background: rgba(15, 23, 42, 0.45);
+      color: #dbeafe;
+      font-size: 0.92rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .debug-live-toggle input {
+      margin: 0;
+      accent-color: #38bdf8;
+      cursor: pointer;
+    }
+
+    .cover-results-live-status {
+      margin-top: 8px;
+      color: #93c5fd;
+      font-size: 0.95rem;
+      min-height: 1.3em;
+    }
+
+    .cover-result-item.live-working {
+      color: #93c5fd;
+    }
+</style>
 
 </head>
 <body>
@@ -87,6 +118,10 @@
           <h2>Available packages</h2>
         </div>
         <div class="library-actions">
+          <label class="debug-live-toggle" for="liveCoverDebug">
+            <input type="checkbox" id="liveCoverDebug">
+            <span>Live debug</span>
+          </label>
           <button class="btn btn-outline-light btn-sm" id="downloadMissingCovers" type="button">
             <i class="fa-solid fa-images"></i>
             Download missing covers
@@ -104,6 +139,7 @@
           </button>
         </div>
         <div id="coverResultsSummary"></div>
+        <div id="coverResultsLiveStatus" class="cover-results-live-status"></div>
         <ul id="coverResultsList"></ul>
       </div>
 
@@ -188,10 +224,13 @@
       const pkgSearch = document.getElementById('pkgSearch');
       const expandAllBtn = document.getElementById('expandAll');
       const downloadMissingCoversBtn = document.getElementById('downloadMissingCovers');
+      const liveCoverDebugToggle = document.getElementById('liveCoverDebug');
       const coverResults = document.getElementById('coverResults');
       const coverResultsSummary = document.getElementById('coverResultsSummary');
+      const coverResultsLiveStatus = document.getElementById('coverResultsLiveStatus');
       const coverResultsList = document.getElementById('coverResultsList');
       const refreshAfterCoversBtn = document.getElementById('refreshAfterCovers');
+      let liveCoverDownloadSource = null;
       const imageModal = document.getElementById('imageModal');
       const modalImage = document.getElementById('modalImage');
       const modalCaption = document.getElementById('modalCaption');
@@ -212,6 +251,177 @@
         try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { message: text }; }
         if (!response.ok) throw new Error(data.message || `Request failed (${response.status})`);
         return data;
+      }
+
+      function formatCoverResultText(item) {
+        const reasonText = item.shortReason || item.reason || '';
+        return `${item.status.toUpperCase()}: ${item.type ? item.type + ' - ' : ''}${item.package}${item.titleId ? ' (' + item.titleId + ')' : ''}${item.searchTitle ? ' search: "' + item.searchTitle + '"' : ''}${item.source ? ' [' + item.source + ']' : ''}${reasonText ? ' - ' + reasonText : ''}${item.savedAs ? ' - saved as ' + item.savedAs : ''}${item.savedTo ? ' in /public/' + item.savedTo : ''}`;
+      }
+
+      function setCoverResultsSummary(data, liveMessage = '') {
+        if (coverResultsSummary) {
+          coverResultsSummary.textContent = `Checked ${data.checked || 0}. Downloaded ${data.downloaded || 0}. Skipped ${data.skipped || 0}. Failed ${data.failed || 0}.`;
+        }
+
+        if (coverResultsLiveStatus) {
+          coverResultsLiveStatus.textContent = liveMessage || '';
+        }
+      }
+
+      function appendCoverResultItem(item) {
+        if (!coverResultsList || !item) return;
+
+        const li = document.createElement('li');
+        li.className = `cover-result-item ${item.status || ''}`;
+        li.textContent = formatCoverResultText(item);
+        if (item.reason && item.shortReason) {
+          li.title = item.reason;
+        }
+        coverResultsList.appendChild(li);
+      }
+
+      function resetCoverResultsPanel() {
+        if (coverResults) coverResults.hidden = false;
+        if (coverResultsSummary) coverResultsSummary.textContent = '';
+        if (coverResultsLiveStatus) coverResultsLiveStatus.textContent = '';
+        if (coverResultsList) coverResultsList.innerHTML = '';
+        if (refreshAfterCoversBtn) refreshAfterCoversBtn.hidden = true;
+      }
+
+      function finishCoverDownloadUi(original, data) {
+        const type = data.failed > 0 ? 'error' : 'success';
+        showToast(data.message || 'Cover download finished', type);
+        setCoverResultsSummary(data);
+
+        downloadMissingCoversBtn.disabled = false;
+        downloadMissingCoversBtn.innerHTML = original;
+
+        if (refreshAfterCoversBtn) {
+          refreshAfterCoversBtn.hidden = !(data.downloaded > 0);
+        }
+
+        if (data.downloaded > 0) {
+          showToast('Covers downloaded. Refresh the page when you are ready to see updated images.', 'success');
+        }
+      }
+
+      async function runCoverDownloadNormal(original) {
+        const data = await requestJson('/api/covers/download-missing', { method: 'POST' });
+
+        resetCoverResultsPanel();
+        setCoverResultsSummary(data);
+
+        (data.results || []).slice(0, 250).forEach((item) => {
+          appendCoverResultItem(item);
+        });
+
+        if ((data.results || []).length > 250) {
+          const li = document.createElement('li');
+          li.textContent = `Showing first 250 of ${data.results.length} results. Open browser console for full result.`;
+          if (coverResultsList) coverResultsList.appendChild(li);
+        }
+
+        console.log('Cover download results:', data);
+        finishCoverDownloadUi(original, data);
+      }
+
+      function runCoverDownloadLive(original) {
+        return new Promise((resolve, reject) => {
+          resetCoverResultsPanel();
+
+          if (liveCoverDownloadSource) {
+            liveCoverDownloadSource.close();
+            liveCoverDownloadSource = null;
+          }
+
+          let finished = false;
+          let started = false;
+          let currentChecked = 0;
+
+          const source = new EventSource('/api/covers/download-missing/stream');
+          liveCoverDownloadSource = source;
+
+          source.onmessage = (event) => {
+            let data = {};
+            try {
+              data = JSON.parse(event.data || '{}');
+            } catch (error) {
+              return;
+            }
+
+            if (data.kind === 'start') {
+              started = true;
+              currentChecked = data.checked || 0;
+              setCoverResultsSummary({
+                checked: currentChecked,
+                downloaded: 0,
+                skipped: 0,
+                failed: 0
+              }, currentChecked > 0 ? `Live debug enabled. Preparing ${currentChecked} missing file(s)...` : 'Nothing to process.');
+              return;
+            }
+
+            if (data.kind === 'item-start') {
+              const counts = data.counts || {};
+              setCoverResultsSummary({
+                checked: currentChecked || data.total || 0,
+                downloaded: counts.downloaded || 0,
+                skipped: counts.skipped || 0,
+                failed: counts.failed || 0
+              }, `Processing ${data.index || 0}/${data.total || 0}: ${data.item?.type || 'item'} - ${data.item?.package || ''}`);
+              return;
+            }
+
+            if (data.kind === 'item-result') {
+              const counts = data.counts || {};
+              setCoverResultsSummary({
+                checked: currentChecked || data.total || 0,
+                downloaded: counts.downloaded || 0,
+                skipped: counts.skipped || 0,
+                failed: counts.failed || 0
+              }, `Processed ${data.index || 0}/${data.total || 0}`);
+              appendCoverResultItem(data.item);
+              return;
+            }
+
+            if (data.kind === 'done') {
+              finished = true;
+              source.close();
+              liveCoverDownloadSource = null;
+              finishCoverDownloadUi(original, data.result || {});
+              resolve(data.result || {});
+              return;
+            }
+
+            if (data.kind === 'error') {
+              finished = true;
+              source.close();
+              liveCoverDownloadSource = null;
+              downloadMissingCoversBtn.disabled = false;
+              downloadMissingCoversBtn.innerHTML = original;
+              if (coverResultsSummary) coverResultsSummary.textContent = data.message || 'Live cover download failed';
+              if (coverResultsLiveStatus) coverResultsLiveStatus.textContent = '';
+              showToast(data.message || 'Live cover download failed', 'error');
+              reject(new Error(data.message || 'Live cover download failed'));
+            }
+          };
+
+          source.onerror = () => {
+            if (finished) return;
+            source.close();
+            liveCoverDownloadSource = null;
+            downloadMissingCoversBtn.disabled = false;
+            downloadMissingCoversBtn.innerHTML = original;
+
+            const message = started
+              ? 'Live debug connection closed before the job finished.'
+              : 'Could not start live debug download.';
+            if (coverResultsSummary) coverResultsSummary.textContent = message;
+            if (coverResultsLiveStatus) coverResultsLiveStatus.textContent = '';
+            showToast(message, 'error');
+            reject(new Error(message));
+          };
+        });
       }
 
       async function loadCurrentIp() {
@@ -287,49 +497,20 @@
         downloadMissingCoversBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Downloading...';
 
         try {
-          const data = await requestJson('/api/covers/download-missing', { method: 'POST' });
-
-          const type = data.failed > 0 ? 'error' : 'success';
-          showToast(data.message || 'Cover download finished', type);
-
-          if (coverResults) coverResults.hidden = false;
-          if (coverResultsSummary) coverResultsSummary.textContent = `Checked ${data.checked || 0}. Downloaded ${data.downloaded || 0}. Skipped ${data.skipped || 0}. Failed ${data.failed || 0}.`;
-          if (coverResultsList) coverResultsList.innerHTML = '';
-
-          (data.results || []).slice(0, 250).forEach((item) => {
-            const li = document.createElement('li');
-            li.className = `cover-result-item ${item.status}`;
-            li.textContent = `${item.status.toUpperCase()}: ${item.type ? item.type + ' - ' : ''}${item.package}${item.titleId ? ' (' + item.titleId + ')' : ''}${item.searchTitle ? ' search: "' + item.searchTitle + '"' : ''}${item.source ? ' [' + item.source + ']' : ''}${item.reason ? ' - ' + item.reason : ''}${item.savedAs ? ' - saved as ' + item.savedAs : ''}${item.savedTo ? ' in /public/' + item.savedTo : ''}`;
-            if (coverResultsList) coverResultsList.appendChild(li);
-          });
-
-          if ((data.results || []).length > 100) {
-            const li = document.createElement('li');
-            li.textContent = `Showing first 250 of ${data.results.length} results. Open browser console for full result.`;
-            if (coverResultsList) coverResultsList.appendChild(li);
-          }
-
-          console.log('Cover download results:', data);
-
-          // Keep the page open so the user can read the cover download results.
-          // Do not auto-reload after downloading covers.
-          downloadMissingCoversBtn.disabled = false;
-          downloadMissingCoversBtn.innerHTML = original;
-
-          if (refreshAfterCoversBtn) {
-            if (refreshAfterCoversBtn) refreshAfterCoversBtn.hidden = !(data.downloaded > 0);
-          }
-
-          if (data.downloaded > 0) {
-            showToast('Covers downloaded. Refresh the page when you are ready to see updated images.', 'success');
+          if (liveCoverDebugToggle && liveCoverDebugToggle.checked) {
+            await runCoverDownloadLive(original);
+          } else {
+            await runCoverDownloadNormal(original);
           }
         } catch (error) {
-          showToast(error.message, 'error');
           if (coverResults) coverResults.hidden = false;
-          if (coverResultsSummary) coverResultsSummary.textContent = error.message;
-          if (coverResultsList) coverResultsList.innerHTML = '';
+          if (coverResultsSummary && !coverResultsSummary.textContent) {
+            coverResultsSummary.textContent = error.message;
+          }
+          if (coverResultsLiveStatus) coverResultsLiveStatus.textContent = '';
           downloadMissingCoversBtn.disabled = false;
           downloadMissingCoversBtn.innerHTML = original;
+          showToast(error.message, 'error');
         }
       });
 
