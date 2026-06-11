@@ -79,16 +79,91 @@ function normalizeSearchTitle(value) {
   return normalized.join(' ');
 }
 
-function buildSearchTitle(root, name) {
-  const rootTitle = cleanGameTitle(root);
-  const nameTitle = cleanGameTitle(name);
-  const combined = nameTitle.toLowerCase().startsWith(rootTitle.toLowerCase())
-    ? nameTitle
-    : `${rootTitle} ${nameTitle}`;
 
-  return normalizeSearchTitle(combined);
+const coverTitleAliases = {
+  SCUS97399: 'God of War',
+  SCES54206: 'God of War II',
+  SLUS22184: 'Resident Evil Code Veronica X',
+  CUSA00667: 'SingStar Mega Hits',
+  CUSA00501: 'SingStar Ultimate Party'
+};
+
+function romanizeTitleNumber(value) {
+  return String(value || '')
+    .replace(/\bGod\s*Of\s*War\s*2\b/gi, 'God of War II')
+    .replace(/\bGod\s*Of\s*War2\b/gi, 'God of War II')
+    .replace(/\bGOW2\b/gi, 'God of War II')
+    .replace(/\bGOW\b/gi, 'God of War')
+    .replace(/\bVeronicaX\b/gi, 'Code Veronica X');
 }
 
+function getBestAliasTitle(value) {
+  const ids = extractAllTitleIds(value);
+
+  for (const id of ids) {
+    if (coverTitleAliases[id]) {
+      return coverTitleAliases[id];
+    }
+  }
+
+  return null;
+}
+
+function cleanCoverSearchTitle(value) {
+  const alias = getBestAliasTitle(value);
+  if (alias) return alias;
+
+  let text = String(value || '');
+
+  // Remove filename extension and common scene/update/version/FW noise.
+  text = text
+    .replace(/\.pkg$/i, ' ')
+    .replace(/\bUPDATE\b/gi, ' ')
+    .replace(/\bBACKPORT\b/gi, ' ')
+    .replace(/\bDUPLEX\b/gi, ' ')
+    .replace(/\bOPOISSO893\b/gi, ' ')
+    .replace(/\bDLPSGAME\.COM\b/gi, ' ')
+    .replace(/\bFXD(?:v)?\d+(?:\.\d+)?\b/gi, ' ')
+    .replace(/\bFW\d+\b/gi, ' ')
+    .replace(/\bV(?:ersion)?\s*\d+(?:[._]\d+)?\b/gi, ' ')
+    .replace(/\bv\d+(?:[._]\d+)?\b/gi, ' ')
+    .replace(/\[[^\]]+\]/g, ' ')
+    .replace(/\([^\)]*Sporty[^\)]*\)/gi, ' ');
+
+  // Remove content IDs like UP9000-SCUS97399_00-SCUS973990000001-A0100-V0100.
+  text = text.replace(/[A-Z]{2}\d{4}-[A-Z0-9]{4,10}\d{5}_00-[A-Z0-9_]+(?:-[A-Z]\d{4}-V\d{4})?/gi, ' ');
+
+  // Remove title IDs after they were used for direct lookup.
+  text = text.replace(/\bCUSA\d{5}\b/gi, ' ');
+  text = text.replace(/\b(SLUS|SCUS|SCES|SLES|SLPS|SLPM|NPUJ|NPUI|NPEF|NPUG|NPEG|NPUB|NPEB|NPHG|ULUS|ULES|UCUS|UCES)[\s._-]*\d{5}\b/gi, ' ');
+
+  // Turn separators into spaces, then apply common short-name expansions.
+  text = text.replace(/[._-]+/g, ' ');
+  text = romanizeTitleNumber(text);
+
+  // Remove duplicate words caused by filenames like GOW__... after GOW expansion.
+  text = text
+    .replace(/\b(God of War)(\s+\1)+\b/gi, '$1')
+    .replace(/\b(Resident Evil)(\s+\1)+\b/gi, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return text;
+}
+
+
+function buildSearchTitle(root, pkgName = '') {
+  const alias = getBestAliasTitle(`${root} ${pkgName}`);
+  if (alias) return alias;
+
+  const cleanedPkg = cleanCoverSearchTitle(pkgName);
+  const cleanedRoot = cleanCoverSearchTitle(root);
+
+  // Prefer the package name when it has useful text. Otherwise use folder/root.
+  const candidate = cleanedPkg.length >= 3 ? cleanedPkg : cleanedRoot;
+
+  return candidate || cleanGameTitle(`${root} ${pkgName}`);
+}
 
 
 function safeLocalImageFilename(value) {
@@ -153,6 +228,36 @@ app.engine('html', mustacheExpress());
 app.set('view engine', 'html');
 app.set('views', path.join(__dirname, 'views'));
 
+
+const coverFetchTimeoutMs = Number.parseInt(process.env.COVER_FETCH_TIMEOUT_MS || '7000', 10);
+const coverItemTimeoutMs = Number.parseInt(process.env.COVER_ITEM_TIMEOUT_MS || '45000', 10);
+const originalFetch = globalThis.fetch.bind(globalThis);
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = coverFetchTimeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await originalFetch(url, {
+      ...options,
+      signal: options.signal || controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  let timeout;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeout));
+}
+
+
 app.get('/', (req, res, next) => {
   try {
     const dirs = flattenPkgs(getPkgs());
@@ -200,164 +305,306 @@ app.get('/api/covers/missing', (req, res, next) => {
   }
 });
 
-app.post('/api/covers/download-missing', async (req, res) => {
-  try {
-    const dirs = flattenPkgs(getPkgs());
-    const missing = getMissingCovers(dirs);
+function getCoverResultCounts(results = []) {
+  return {
+    downloaded: results.filter((item) => item.status === 'downloaded').length,
+    skipped: results.filter((item) => item.status === 'skipped').length,
+    failed: results.filter((item) => item.status === 'failed').length,
+    info: results.filter((item) => item.status === 'info').length
+  };
+}
 
-    if (missing.length === 0) {
-      return res.json({
-        message: 'No missing covers or thumbnails found',
-        checked: 0,
-        downloaded: 0,
-        skipped: 0,
-        failed: 0,
-        results: []
-      });
+function buildCoverDownloadResponse(checked, results = []) {
+  const counts = getCoverResultCounts(results);
+
+  return {
+    message: checked === 0
+      ? 'No missing covers or thumbnails found'
+      : `Cover download finished: ${counts.downloaded} downloaded, ${counts.skipped} skipped, ${counts.failed} failed`,
+    checked,
+    downloaded: counts.downloaded,
+    skipped: counts.skipped,
+    failed: counts.failed,
+    info: counts.info,
+    results
+  };
+}
+
+async function runMissingCoverDownload(onProgress = null) {
+  const emit = (payload) => {
+    if (typeof onProgress === 'function') {
+      onProgress(payload);
     }
+  };
 
-    let coverMap = {};
-    const results = [];
+  const dirs = flattenPkgs(getPkgs());
+  const missing = getMissingCovers(dirs);
+
+  emit({
+    kind: 'start',
+    checked: missing.length,
+    counts: { downloaded: 0, skipped: 0, failed: 0, info: 0 }
+  });
+
+  if (missing.length === 0) {
+    const emptyResult = buildCoverDownloadResponse(0, []);
+    emit({ kind: 'done', result: emptyResult });
+    return emptyResult;
+  }
+
+  let coverMap = {};
+  const results = [];
+
+  try {
+    coverMap = await loadCoverMap();
+  } catch (error) {
+    const infoItem = {
+      package: 'cover-map',
+      type: 'info',
+      status: 'info',
+      reason: `Could not load GitHub cover map, trying fallback searches only: ${error.message}`
+    };
+
+    results.push(infoItem);
+    emit({
+      kind: 'item-result',
+      index: 0,
+      total: missing.length,
+      item: infoItem,
+      counts: getCoverResultCounts(results)
+    });
+  }
+
+  for (let i = 0; i < missing.length; i += 1) {
+    const item = missing[i];
+    const titleId = extractTitleId(item.lookupText);
+
+    emit({
+      kind: 'item-start',
+      index: i + 1,
+      total: missing.length,
+      item: {
+        package: item.package || item.name,
+        type: item.type,
+        titleId,
+        searchTitle: item.searchTitle
+      },
+      counts: getCoverResultCounts(results)
+    });
+
+    let resultItem = null;
+    let lookup = null;
 
     try {
-      coverMap = await loadCoverMap();
+      lookup = await withTimeout(
+        findCoverUrl(titleId, coverMap, item),
+        coverItemTimeoutMs,
+        `Timed out after ${coverItemTimeoutMs}ms while searching ${item.type} - ${item.package || item.name}`
+      );
     } catch (error) {
-      results.push({
-        package: 'cover-map',
-        type: 'info',
-        status: 'info',
-        reason: `Could not load GitHub cover map, trying fallback searches only: ${error.message}`
+      resultItem = {
+        package: item.package || item.name,
+        type: item.type,
+        targetName: item.targetName,
+        titleId,
+        searchTitle: item.searchTitle,
+        status: 'skipped',
+        reason: `${error.message}. Moving to next item.`
+      };
+
+      results.push(resultItem);
+      emit({
+        kind: 'item-result',
+        index: i + 1,
+        total: missing.length,
+        item: resultItem,
+        counts: getCoverResultCounts(results)
       });
+      continue;
     }
 
-    for (const item of missing) {
-      const titleId = extractTitleId(item.lookupText);
-      const lookup = await findCoverUrl(titleId, coverMap, item);
+    if (!lookup.url) {
+      resultItem = {
+        package: item.package || item.name,
+        type: item.type,
+        targetName: item.targetName,
+        titleId,
+        searchTitle: item.searchTitle,
+        status: 'skipped',
+        shortReason: 'No usable cover found after all sources',
+        reason: lookup.reason || 'No cover URL found'
+      };
+      results.push(resultItem);
+      emit({
+        kind: 'item-result',
+        index: i + 1,
+        total: missing.length,
+        item: resultItem,
+        counts: getCoverResultCounts(results)
+      });
+      continue;
+    }
 
-      if (!lookup.url) {
-        results.push({
+    try {
+      const targetDir = item.type === 'thumbnail' ? thumbnailImagesPath : coverImagesPath;
+      const savedAs = await downloadImageToFolder(lookup.url, item.targetName, targetDir);
+
+      resultItem = {
+        package: item.package || item.name,
+        type: item.type,
+        titleId,
+        searchTitle: item.searchTitle,
+        status: 'downloaded',
+        source: lookup.source,
+        savedAs,
+        savedTo: item.type === 'thumbnail' ? 'thumbnail' : 'images'
+      };
+
+      results.push(resultItem);
+    } catch (error) {
+      let fallbackSaved = false;
+
+      if (item.searchTitle && !String(lookup.source || '').includes('playstation-store-search')) {
+        const fallbackLookup = await findCoverUrlByStoreSearch(item.searchTitle);
+
+        if (fallbackLookup.url) {
+          try {
+            const targetDir = item.type === 'thumbnail' ? thumbnailImagesPath : coverImagesPath;
+            const savedAs = await downloadImageToFolder(fallbackLookup.url, item.targetName, targetDir);
+
+            resultItem = {
+              package: item.package || item.name,
+              type: item.type,
+              titleId,
+              searchTitle: item.searchTitle,
+              status: 'downloaded',
+              source: `${fallbackLookup.source} after ${lookup.source} failed`,
+              savedAs,
+              savedTo: item.type === 'thumbnail' ? 'thumbnail' : 'images'
+            };
+
+            results.push(resultItem);
+            fallbackSaved = true;
+          } catch (fallbackError) {
+            // Continue to ORBISPatches final fallback below.
+          }
+        }
+      }
+
+      if (!fallbackSaved && titleId && coverEnableOrbisPatches && !String(lookup.source || '').includes('orbispatches')) {
+        const orbisLookup = await findCoverUrlFromOrbisPatches(titleId);
+
+        if (orbisLookup.url) {
+          try {
+            const targetDir = item.type === 'thumbnail' ? thumbnailImagesPath : coverImagesPath;
+            const savedAs = await downloadImageToFolder(orbisLookup.url, item.targetName, targetDir);
+
+            resultItem = {
+              package: item.package || item.name,
+              type: item.type,
+              titleId,
+              searchTitle: item.searchTitle,
+              status: 'downloaded',
+              source: `${orbisLookup.source} after ${lookup.source} failed`,
+              savedAs,
+              savedTo: item.type === 'thumbnail' ? 'thumbnail' : 'images'
+            };
+
+            results.push(resultItem);
+            fallbackSaved = true;
+          } catch (orbisError) {
+            resultItem = {
+              package: item.package || item.name,
+              type: item.type,
+              targetName: item.targetName,
+              titleId,
+              searchTitle: item.searchTitle,
+              status: 'failed',
+              source: `${lookup.source}; final fallback ${orbisLookup.source}`,
+              reason: `${error.message}; final fallback failed: ${orbisError.message}`
+            };
+
+            results.push(resultItem);
+            fallbackSaved = true;
+          }
+        }
+      }
+
+      if (!fallbackSaved) {
+        resultItem = {
           package: item.package || item.name,
           type: item.type,
           targetName: item.targetName,
           titleId,
           searchTitle: item.searchTitle,
-          status: 'skipped',
-          reason: lookup.reason || 'No cover URL found'
-        });
-        continue;
-      }
-
-      try {
-        const targetDir = item.type === 'thumbnail' ? thumbnailImagesPath : coverImagesPath;
-        const savedAs = await downloadImageToFolder(lookup.url, item.targetName, targetDir);
-
-        results.push({
-          package: item.package || item.name,
-          type: item.type,
-          titleId,
-          searchTitle: item.searchTitle,
-          status: 'downloaded',
+          status: 'failed',
           source: lookup.source,
-          savedAs,
-          savedTo: item.type === 'thumbnail' ? 'thumbnail' : 'images'
-        });
-      } catch (error) {
-        let fallbackSaved = false;
+          reason: error.message
+        };
 
-        if (item.searchTitle && !String(lookup.source || '').includes('playstation-store-search')) {
-          const fallbackLookup = await findCoverUrlByStoreSearch(item.searchTitle);
-
-          if (fallbackLookup.url) {
-            try {
-              const targetDir = item.type === 'thumbnail' ? thumbnailImagesPath : coverImagesPath;
-              const savedAs = await downloadImageToFolder(fallbackLookup.url, item.targetName, targetDir);
-
-              results.push({
-                package: item.package || item.name,
-                type: item.type,
-                titleId,
-                searchTitle: item.searchTitle,
-                status: 'downloaded',
-                source: `${fallbackLookup.source} after ${lookup.source} failed`,
-                savedAs,
-                savedTo: item.type === 'thumbnail' ? 'thumbnail' : 'images'
-              });
-
-              fallbackSaved = true;
-            } catch (fallbackError) {
-              // Continue to ORBISPatches final fallback below.
-            }
-          }
-        }
-
-        if (!fallbackSaved && titleId && coverEnableOrbisPatches && !String(lookup.source || '').includes('orbispatches')) {
-          const orbisLookup = await findCoverUrlFromOrbisPatches(titleId);
-
-          if (orbisLookup.url) {
-            try {
-              const targetDir = item.type === 'thumbnail' ? thumbnailImagesPath : coverImagesPath;
-              const savedAs = await downloadImageToFolder(orbisLookup.url, item.targetName, targetDir);
-
-              results.push({
-                package: item.package || item.name,
-                type: item.type,
-                titleId,
-                searchTitle: item.searchTitle,
-                status: 'downloaded',
-                source: `${orbisLookup.source} after ${lookup.source} failed`,
-                savedAs,
-                savedTo: item.type === 'thumbnail' ? 'thumbnail' : 'images'
-              });
-
-              fallbackSaved = true;
-            } catch (orbisError) {
-              results.push({
-                package: item.package || item.name,
-                type: item.type,
-                targetName: item.targetName,
-                titleId,
-                searchTitle: item.searchTitle,
-                status: 'failed',
-                source: `${lookup.source}; final fallback ${orbisLookup.source}`,
-                reason: `${error.message}; final fallback failed: ${orbisError.message}`
-              });
-
-              fallbackSaved = true;
-            }
-          }
-        }
-
-        if (!fallbackSaved) {
-          results.push({
-            package: item.package || item.name,
-            type: item.type,
-            targetName: item.targetName,
-            titleId,
-            searchTitle: item.searchTitle,
-            status: 'failed',
-            source: lookup.source,
-            reason: error.message
-          });
-        }
+        results.push(resultItem);
       }
     }
 
-    const downloaded = results.filter((item) => item.status === 'downloaded').length;
-    const skipped = results.filter((item) => item.status === 'skipped').length;
-    const failed = results.filter((item) => item.status === 'failed').length;
-    const info = results.filter((item) => item.status === 'info').length;
-
-    res.json({
-      message: `Cover download finished: ${downloaded} downloaded, ${skipped} skipped, ${failed} failed`,
-      checked: missing.length,
-      downloaded,
-      skipped,
-      failed,
-      info,
-      results
+    emit({
+      kind: 'item-result',
+      index: i + 1,
+      total: missing.length,
+      item: resultItem,
+      counts: getCoverResultCounts(results)
     });
+  }
+
+  const finalResult = buildCoverDownloadResponse(missing.length, results);
+  emit({ kind: 'done', result: finalResult });
+  return finalResult;
+}
+
+app.post('/api/covers/download-missing', async (req, res) => {
+  try {
+    const result = await runMissingCoverDownload();
+    res.json(result);
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+app.get('/api/covers/download-missing/stream', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders();
+  }
+
+  let closed = false;
+  const keepAlive = setInterval(() => {
+    if (!closed) {
+      res.write(': ping\n\n');
+    }
+  }, 15000);
+
+  req.on('close', () => {
+    closed = true;
+  });
+
+  const send = (payload) => {
+    if (!closed) {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    }
+  };
+
+  try {
+    await runMissingCoverDownload(send);
+  } catch (error) {
+    send({ kind: 'error', message: error.message });
+  } finally {
+    clearInterval(keepAlive);
+    if (!closed) {
+      res.end();
+    }
   }
 });
 
@@ -695,7 +942,7 @@ function extractContentId(value) {
 
 
 async function loadCoverMap() {
-  const response = await fetch(coverMapUrl, {
+  const response = await fetchWithTimeout(coverMapUrl, {
     headers: {
       Accept: 'application/json',
       'User-Agent': 'ps4-pkg-sender'
@@ -761,7 +1008,26 @@ async function findCoverUrl(titleId, coverMap, item = {}) {
     }
   }
 
-  // 4. SerialStation title search, then PlayStation Store title search.
+  // 4. If this is an old PS1/PS2/PSP ID, try the clean alias title before the noisy filename title.
+  const aliasSearchTitle = cleanCoverSearchTitle(lookupText);
+
+  if (aliasSearchTitle && aliasSearchTitle !== searchTitle) {
+    const aliasSerialSearchResult = await findCoverUrlFromSerialStationSearch(aliasSearchTitle);
+    tried.push(`SerialStation alias search "${aliasSearchTitle}": ${aliasSerialSearchResult.reason || (aliasSerialSearchResult.url ? 'ok' : 'no result')}`);
+
+    if (aliasSerialSearchResult.url) {
+      return aliasSerialSearchResult;
+    }
+
+    const aliasStoreSearchResult = await findCoverUrlByStoreSearch(aliasSearchTitle);
+    tried.push(`PlayStation alias search "${aliasSearchTitle}": ${aliasStoreSearchResult.reason || (aliasStoreSearchResult.url ? 'ok' : 'no result')}`);
+
+    if (aliasStoreSearchResult.url) {
+      return aliasStoreSearchResult;
+    }
+  }
+
+  // 5. SerialStation title search, then PlayStation Store title search.
   if (searchTitle) {
     const serialSearchResult = await findCoverUrlFromSerialStationSearch(searchTitle);
     tried.push(`SerialStation title search "${searchTitle}": ${serialSearchResult.reason || (serialSearchResult.url ? 'ok' : 'no result')}`);
@@ -775,6 +1041,17 @@ async function findCoverUrl(titleId, coverMap, item = {}) {
 
     if (storeSearchResult.url) {
       return storeSearchResult;
+    }
+
+    const cleanerSearchTitle = cleanCoverSearchTitle(searchTitle);
+
+    if (cleanerSearchTitle && cleanerSearchTitle !== searchTitle) {
+      const cleanerStoreResult = await findCoverUrlByStoreSearch(cleanerSearchTitle);
+      tried.push(`PlayStation clean title search "${cleanerSearchTitle}": ${cleanerStoreResult.reason || (cleanerStoreResult.url ? 'ok' : 'no result')}`);
+
+      if (cleanerStoreResult.url) {
+        return cleanerStoreResult;
+      }
     }
   }
 
@@ -811,7 +1088,7 @@ async function findCoverUrlFromPlayStationStore(titleId) {
     const url = `https://store.playstation.com/store/api/chihiro/00_09_000/titlecontainer/${encodeURIComponent(country)}/${encodeURIComponent(language)}/999/${encodeURIComponent(titleId)}_00`;
 
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         headers: {
           Accept: 'application/json',
           'User-Agent': 'ps4-pkg-sender'
@@ -855,7 +1132,7 @@ async function findCoverUrlFromContentId(contentId) {
     const url = `https://store.playstation.com/store/api/chihiro/00_09_000/container/${encodeURIComponent(country)}/${encodeURIComponent(language)}/999/${encodeURIComponent(contentId)}`;
 
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         headers: {
           Accept: 'application/json',
           'User-Agent': 'ps4-pkg-sender'
@@ -891,7 +1168,7 @@ async function findCoverUrlFromContentId(contentId) {
 
 async function findCoverUrlFromOrbisPatches(titleId) {
   try {
-    const response = await fetch(`https://orbispatches.com/${encodeURIComponent(titleId)}`, {
+    const response = await fetchWithTimeout(`https://orbispatches.com/${encodeURIComponent(titleId)}`, {
       headers: {
         Accept: 'text/html',
         'User-Agent': 'ps4-pkg-sender'
@@ -952,7 +1229,7 @@ async function findCoverUrlFromSerialStationTitleId(titleId, visited = new Set()
   visited.add(url);
 
   try {
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: {
         Accept: 'text/html',
         'User-Agent': 'ps4-pkg-sender'
@@ -1013,7 +1290,7 @@ async function findCoverUrlFromSerialStationGamePage(gameUrl, originalTitleId, v
   visited.add(gameUrl);
 
   try {
-    const response = await fetch(gameUrl, {
+    const response = await fetchWithTimeout(gameUrl, {
       headers: {
         Accept: 'text/html',
         'User-Agent': 'ps4-pkg-sender'
@@ -1079,7 +1356,7 @@ async function findCoverUrlFromSerialStationGamePage(gameUrl, originalTitleId, v
 
 async function findCoverUrlFromSerialStationSearch(searchTitle) {
   try {
-    const response = await fetch(`https://serialstation.com/titles/?name=${encodeURIComponent(searchTitle)}`, {
+    const response = await fetchWithTimeout(`https://serialstation.com/titles/?name=${encodeURIComponent(searchTitle)}`, {
       headers: {
         Accept: 'text/html',
         'User-Agent': 'ps4-pkg-sender'
@@ -1143,7 +1420,7 @@ async function findCoverUrlByStoreSearch(searchTitle) {
 
     for (const url of urls) {
       try {
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, {
           headers: {
             Accept: 'application/json',
             'User-Agent': 'ps4-pkg-sender'
@@ -1358,7 +1635,7 @@ async function downloadImageToFolder(imageUrl, imgname, targetDir) {
     throw new Error('Cover URL is not http/https');
   }
 
-  const response = await fetch(imageUrl, {
+  const response = await fetchWithTimeout(imageUrl, {
     headers: {
       'User-Agent': 'ps4-pkg-sender'
     }
