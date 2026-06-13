@@ -1654,6 +1654,61 @@
       }
     }
 
+
+    /* Small package cover image fix */
+    .cover-button {
+      width: 78px !important;
+      height: 78px !important;
+      min-width: 78px !important;
+      padding: 0 !important;
+      border: 1px solid rgba(148, 163, 184, 0.28) !important;
+      border-radius: 16px !important;
+      overflow: hidden !important;
+      background: rgba(148, 163, 184, 0.18) !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      cursor: pointer !important;
+      line-height: 0 !important;
+    }
+
+    .cover-button img,
+    .cover-button .pkg-cover-img {
+      display: block !important;
+      width: 100% !important;
+      height: 100% !important;
+      max-width: none !important;
+      max-height: none !important;
+      object-fit: cover !important;
+      object-position: center !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+      filter: none !important;
+      transform: none !important;
+    }
+
+    .cover-button::before,
+    .cover-button::after {
+      display: none !important;
+      content: none !important;
+    }
+
+    body[data-theme="ps4"] .cover-button {
+      border-color: rgba(190, 232, 255, 0.26) !important;
+      background: rgba(0, 40, 120, 0.44) !important;
+      box-shadow:
+        0 10px 26px rgba(0, 12, 62, 0.26),
+        inset 0 1px 0 rgba(255,255,255,0.10) !important;
+    }
+
+    body[data-theme="light"] .cover-button {
+      background: rgba(226, 232, 240, 0.8) !important;
+      border-color: rgba(15, 23, 42, 0.12) !important;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.10) !important;
+    }
+
 </style>
 
 </head>
@@ -1863,6 +1918,34 @@
 
 
 
+
+
+      function repairCoverButtons() {
+        document.querySelectorAll('.cover-button').forEach((button) => {
+          const imageUrl = button.getAttribute('data-image');
+          if (!imageUrl) return;
+
+          let img = button.querySelector('img');
+
+          if (!img) {
+            img = document.createElement('img');
+            img.className = 'pkg-cover-img';
+            img.alt = `${button.getAttribute('data-title') || 'PKG'} cover`;
+            img.loading = 'lazy';
+            img.onerror = function () {
+              if (!this.dataset.fallbackApplied) {
+                this.dataset.fallbackApplied = '1';
+                this.src = '/public/images/folder.png';
+              }
+            };
+            button.appendChild(img);
+          }
+
+          if (!img.getAttribute('src') || img.getAttribute('src') !== imageUrl) {
+            img.setAttribute('src', imageUrl);
+          }
+        });
+      }
 
       function encodePublicImageUrls() {
         document.querySelectorAll('img[src^="/public/"], button[data-image^="/public/"]').forEach((el) => {
@@ -2273,6 +2356,7 @@
 
       fixDoublePkgExtensions();
       encodePublicImageUrls();
+      repairCoverButtons();
             loadCurrentIp();
     });
   </script>
