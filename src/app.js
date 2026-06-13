@@ -155,6 +155,14 @@ function cleanCoverSearchTitle(value) {
 
 
 
+
+function toPublicImageUrl(folder, filename, fallback = 'folder.png') {
+  const safeFolder = String(folder || '').replace(/^\/+|\/+$/g, '');
+  const rawName = String(filename || fallback);
+  const cleanName = rawName.replace(/^\/+/, '');
+  return `/public/${safeFolder}/${encodeURIComponent(cleanName)}`;
+}
+
 function getPkgDisplayName(pkg) {
   const raw = String((pkg && (pkg.displayName || pkg.shortDisplayName || pkg.fileName || pkg.filename || pkg.name)) || 'Unknown.pkg');
   return raw.toLowerCase().endsWith('.pkg') ? raw : `${raw}.pkg`;
