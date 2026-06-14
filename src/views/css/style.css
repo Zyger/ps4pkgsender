@@ -1582,3 +1582,86 @@ body.modal-open {
     grid-template-columns: 1fr !important;
   }
 }
+
+
+/* =========================================================
+   READABILITY FIX FOR BRIGHT THEME IMAGES
+   Keeps the image sharp/no blur, but adds a dark overlay inside
+   only the 3 theme cards so text stays readable.
+   ========================================================= */
+
+#topThemeStage > .hero-card.has-card-theme-image,
+#topThemeStage > .control-grid > .panel-card.ps4-card.has-card-theme-image,
+#topThemeStage > .control-grid > .panel-card.search-card.search-theme-card.has-card-theme-image,
+#topThemeStage > .control-grid > .panel-card.search-theme-card.has-card-theme-image {
+  position: relative !important;
+  isolation: isolate !important;
+  overflow: hidden !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+#topThemeStage > .hero-card.has-card-theme-image::after,
+#topThemeStage > .control-grid > .panel-card.ps4-card.has-card-theme-image::after,
+#topThemeStage > .control-grid > .panel-card.search-card.search-theme-card.has-card-theme-image::after,
+#topThemeStage > .control-grid > .panel-card.search-theme-card.has-card-theme-image::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  border-radius: inherit !important;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(15, 23, 42, 0.08), transparent 36%),
+    linear-gradient(90deg, rgba(2, 6, 23, 0.56), rgba(2, 6, 23, 0.34) 48%, rgba(2, 6, 23, 0.50)) !important;
+}
+
+#topThemeStage > .hero-card.has-card-theme-image > *,
+#topThemeStage > .control-grid > .panel-card.ps4-card.has-card-theme-image > *,
+#topThemeStage > .control-grid > .panel-card.search-card.search-theme-card.has-card-theme-image > *,
+#topThemeStage > .control-grid > .panel-card.search-theme-card.has-card-theme-image > * {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+#topThemeStage .has-card-theme-image .eyebrow,
+#topThemeStage .has-card-theme-image h1,
+#topThemeStage .has-card-theme-image h2,
+#topThemeStage .has-card-theme-image h3,
+#topThemeStage .has-card-theme-image .hero-text,
+#topThemeStage .has-card-theme-image .theme-badge,
+#topThemeStage .has-card-theme-image .ip-pill {
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.88), 0 1px 2px rgba(0, 0, 0, 0.90) !important;
+}
+
+#topThemeStage .has-card-theme-image .hero-text {
+  color: rgba(239, 246, 255, 0.94) !important;
+}
+
+#topThemeStage .has-card-theme-image .stat-card {
+  background: rgba(3, 7, 18, 0.54) !important;
+  border-color: rgba(255, 255, 255, 0.24) !important;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.32) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+#topThemeStage .has-card-theme-image .stat-card span,
+#topThemeStage .has-card-theme-image .stat-card small {
+  color: #f8fbff !important;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.86) !important;
+}
+
+#topThemeStage .has-card-theme-image .form-control,
+#topThemeStage .has-card-theme-image .search-box input {
+  color: #f8fbff !important;
+  background: rgba(3, 7, 18, 0.46) !important;
+  border-color: rgba(255, 255, 255, 0.30) !important;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.24) !important;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.80) !important;
+}
+
+#topThemeStage .has-card-theme-image .form-control::placeholder,
+#topThemeStage .has-card-theme-image .search-box input::placeholder {
+  color: rgba(239, 246, 255, 0.72) !important;
+}
