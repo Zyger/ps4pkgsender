@@ -9,6 +9,7 @@ const filesizeModule = require('filesize');
 const formatFileSize = typeof filesizeModule === 'function' ? filesizeModule : filesizeModule.filesize;
 
 const port = Number(process.env.PORT || 7777);
+const rpiPort = Number(process.env.RPI_PORT || 12800);
 const pkgDirPath = path.resolve(process.env.PKG_DIR || './pkgs');
 const localIp = process.env.LOCALIP || 'localhost';
 const coverImagesPath = path.join(__dirname, 'public', 'images');
@@ -794,7 +795,7 @@ function encodeRelativeUrl(filepath) {
 function ps4Install(filepath) {
   return new Promise((resolve, reject) => {
     const pkgUri = `http://${localIp}:${port}/pkgfiles/${encodeRelativeUrl(filepath)}`;
-    const ps4ApiUri = `http://${currentPS4ipadr}:12800/api/install`;
+    const ps4ApiUri = `http://${currentPS4ipadr}:${rpiPort}/api/install`;
     const payload = JSON.stringify({ type: 'direct', packages: [pkgUri] });
 
     execFile('curl', ['-sS', '-v', ps4ApiUri, '--data', payload], { timeout: 30000 }, (err, stdout, stderr) => {
