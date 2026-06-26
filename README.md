@@ -162,6 +162,7 @@ Example `.env`:
 LOCALIP=192.168.1.202
 PS4IP=192.168.1.50
 PORT=7777
+RPI_PORT=12800
 PKG_DIR=/pkgs
 COVER_STORE_REGIONS=DK/da,GB/en,US/en,DE/de,SE/sv,NO/no
 COVER_SEARCH_REGIONS=DK/da,GB/en,US/en,DE/de,SE/sv,NO/no
@@ -186,6 +187,7 @@ services:
       LOCALIP: "192.168.1.202"
       PS4IP: "192.168.1.50"
       PORT: "7777"
+      RPI_PORT: "12800"
       PKG_DIR: "/pkgs"
       COVER_ENABLE_ORBISPATCHES: "true"
       COVER_STORE_REGIONS: "DK/da,GB/en,US/en,DE/de,SE/sv,NO/no"
