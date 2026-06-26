@@ -147,6 +147,7 @@ FAILED: thumbnail - Castlevania_SLUS00067.pkg
 | `LOCALIP` | IP or hostname that the PS4 can reach to download PKGs from this server | `192.168.1.202` |
 | `PS4IP` | PS4 package installer IP address | `192.168.1.50` |
 | `PORT` | Web server port inside the container | `7777` |
+| `RPI_PORT` | Port used to communicate with the Remote Package Installer | `12800` |
 | `PKG_DIR` | Path to your package library inside the container | `/pkgs` |
 | `COVER_MAP_URL` | Optional JSON cover map URL | `https://raw.githubusercontent.com/hmn/ps4-imagemap/master/games.json` |
 | `COVER_STORE_REGIONS` | PlayStation Store regions to try | `DK/da,GB/en,US/en,DE/de,SE/sv,NO/no` |
